@@ -1,1 +1,1 @@
-# FundMe
+# Student Grade Manager
