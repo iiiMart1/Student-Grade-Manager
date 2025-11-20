@@ -97,10 +97,16 @@ void bitonic_merge(Student students[], int low, int cnt, int dir)
     if (cnt > 1)
     {
         int k = cnt / 2;
+
+        // Compare and swap elements across the entire sequence
         for (int i = low; i < low + k; i++)
         {
             comp_and_swap(students, i, i + k, dir);
         }
+
+        // Recursively merge the two halves
+        bitonic_merge(students, low, k, dir);
+        bitonic_merge(students, low + k, k, dir);
     }
 }
 
@@ -111,9 +117,13 @@ void bitonic_sort_by_name(Student students[], int low, int cnt, int dir)
     {
         int k = cnt / 2;
 
-        // Sort in ascending order
+        // Sort first half in ascending order
         bitonic_sort_by_name(students, low, k, 1);
+
+        // Sort second half in descending order
         bitonic_sort_by_name(students, low + k, k, 0);
+
+        // Merge the whole sequence in ascending order
         bitonic_merge(students, low, cnt, dir);
     }
 }
