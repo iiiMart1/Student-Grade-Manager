@@ -8,6 +8,7 @@
 #define MAX_THREADS 8
 #define MAX_STUDENTS 10000
 
+
 /* Semaphore used to serialize console output in threaded workers so lines
    don't interleave when multiple threads print simultaneously. Initialize
    with sem_init(&s, 0, 1) in main. */

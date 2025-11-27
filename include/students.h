@@ -3,6 +3,7 @@
 
 /* Simple container for three numeric grades */
 typedef struct
+
 {
     int TD;
     int TP;

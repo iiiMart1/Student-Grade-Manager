@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
+
 #define MAX_STUDENTS 10000
 double get_time_ms();
 extern sem_t s;
