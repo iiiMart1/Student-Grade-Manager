@@ -6,7 +6,9 @@
 ![Repo](https://img.shields.io/badge/Repo-Student--Grade--Manager-blue.svg)
 
 **Author:** Marwane Mohammedi
+
 **University:** University Of Belhadj Bouchaib Ain Temouchent
+
 **Repository:** [https://github.com/iiiMart1/Student-Grade-Manager](https://github.com/iiiMart1/Student-Grade-Manager)
 
 ---
@@ -129,7 +131,7 @@ student_manager.exe # Windows
 
 ## 📸 Screenshots
 
-_(Add program execution screenshots here)_
+Check ScreenShots Folder
 
 ---
 
