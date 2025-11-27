@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "*.css": "css",
-        "students.h": "c",
-        "windows.h": "c"
-    }
-}
