@@ -19,6 +19,11 @@ typedef struct {
     int start;
     int end;
 } ThreadData;
+typedef struct {
+    Student *students;
+    int left;
+    int right;
+} MergeSortData;
 
 
 // Function declarations for sorting algorithms
@@ -44,6 +49,8 @@ void sort_by_average_thread(Student students[], int count);
 void calculate_averages_pthread(Student students[], int count);
 void merge_sort_pthread(Student students[], int count);
 void random_name(char *name, int min_len, int max_len);
+void merge_sort_by_average_mt(Student students[], int left, int right) ;
+
 
 #endif
 

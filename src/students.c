@@ -7,6 +7,7 @@
 
 #define MAX_STUDENTS 10000
 sem_t s;
+int active_threads = 0;
 
 // Helper function to calculate student average
 float calculate_student_average(Student student)
@@ -14,74 +15,86 @@ float calculate_student_average(Student student)
     return (student.opsys.TD + student.opsys.TP) * 0.2 + student.opsys.EXAM * 0.6;
 }
 
-// Merge function for merge sort
-void merge_by_average(Student students[], int left, int mid, int right)
-{
+pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+#define MAX_THREADS 4
+void merge_by_average(Student students[], int left, int mid, int right) {
     int i, j, k;
     int n1 = mid - left + 1;
     int n2 = right - mid;
 
-    // Create temporary arrays using dynamic allocation
     Student *L = (Student *)malloc(n1 * sizeof(Student));
     Student *R = (Student *)malloc(n2 * sizeof(Student));
 
-    // Copy data to temporary arrays
-    for (i = 0; i < n1; i++)
-        L[i] = students[left + i];
-    for (j = 0; j < n2; j++)
-        R[j] = students[mid + 1 + j];
+    for (i = 0; i < n1; i++) L[i] = students[left + i];
+    for (j = 0; j < n2; j++) R[j] = students[mid + 1 + j];
 
-    // Merge the temporary arrays back
-    i = 0;
-    j = 0;
-    k = left;
+    i = 0; j = 0; k = left;
 
-    while (i < n1 && j < n2)
-    {
-        if (calculate_student_average(L[i]) >= calculate_student_average(R[j]))
-        {
-            students[k] = L[i];
-            i++;
-        }
-        else
-        {
-            students[k] = R[j];
-            j++;
-        }
-        k++;
+    while (i < n1 && j < n2) {
+        if (calculate_student_average(L[i]) >= calculate_student_average(R[j])) students[k++] = L[i++];
+        else students[k++] = R[j++];
     }
 
-    // Copy remaining elements of L[]
-    while (i < n1)
-    {
-        students[k] = L[i];
-        i++;
-        k++;
-    }
-
-    // Copy remaining elements of R[]
-    while (j < n2)
-    {
-        students[k] = R[j];
-        j++;
-        k++;
-    }
+    while (i < n1) students[k++] = L[i++];
+    while (j < n2) students[k++] = R[j++];
 
     free(L);
     free(R);
 }
+void merge_sort_by_average(Student students[], int left, int right) { 
+    if (left < right) { int mid = left + (right - left) / 2;
+     merge_sort_by_average(students, left, mid);
+     merge_sort_by_average(students, mid + 1, right);
+     merge_by_average(students, left, mid, right);
+ } }
+void *merge_sort_worker(void *arg) ;
 
-// Merge sort implementation for average grades (descending order)
-void merge_sort_by_average(Student students[], int left, int right)
-{
-    if (left < right)
-    {
-        int mid = left + (right - left) / 2;
+void merge_sort_by_average_mt(Student students[], int left, int right) {
+    if (left >= right) return;
 
-        merge_sort_by_average(students, left, mid);
-        merge_sort_by_average(students, mid + 1, right);
-        merge_by_average(students, left, mid, right);
+    int mid = left + (right - left) / 2;
+
+    pthread_t thread ;
+    int thread_created = 0;
+
+    pthread_mutex_lock(&thread_mutex);
+    if (active_threads < MAX_THREADS) {
+        active_threads++;
+        thread_created = 1;
     }
+    pthread_mutex_unlock(&thread_mutex);
+
+    if (thread_created) {
+        MergeSortData *data = malloc(sizeof(MergeSortData));
+        data->students = students;
+        data->left = left;
+        data->right = mid;
+        pthread_create(&thread, NULL, merge_sort_worker, data);
+
+        // Sort right side in current thread
+        merge_sort_by_average_mt(students, mid + 1, right);
+
+        // Wait for left side thread
+        pthread_join(thread, NULL);
+    } else {
+        // Both sides in current thread if thread limit reached
+        merge_sort_by_average_mt(students, left, mid);
+        merge_sort_by_average_mt(students, mid + 1, right);
+    }
+
+    merge_by_average(students, left, mid, right);
+}
+
+void *merge_sort_worker(void *arg) {
+    MergeSortData *data = (MergeSortData *)arg;
+    merge_sort_by_average_mt(data->students, data->left, data->right);
+    free(data);
+
+    pthread_mutex_lock(&thread_mutex);
+    active_threads--;
+    pthread_mutex_unlock(&thread_mutex);
+
+    return NULL;
 }
 // Bitonic sort helper functions
 void bitonic_compare(Student students[], int i, int j, int dir)
@@ -310,13 +323,9 @@ void sort_by_average_thread(Student students[], int count)
         printf("No students to sort.\n");
         return;
     }
-
-    printf("\n=== Before Sorting by Average ===\n");
-    display_students(students, count);
-
     if (count > 0)
     {
-        merge_sort_pthread(students, count);
+        merge_sort_by_average_mt(students, 0, count -1);
     }
 
     printf("\n=== After Sorting by Average (Descending) ===\n");
