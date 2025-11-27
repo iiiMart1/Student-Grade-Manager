@@ -33,10 +33,18 @@ typedef struct
     Student *students;
     int left, right;
 } QuickSortData;
+typedef struct
+{
+    Student *students;
+    int start;
+    int end;
+    const char *target_name;
+    int found_index;
+    int *found_flag;
+} SearchThreadData;
 
 // Function declarations for sorting algorithms
 void merge_sort_by_average(Student students[], int left, int right);
-void findStudentByName_threaded(Student students[], int count, int num_threads);
 float calculate_student_average(Student student);
 void quick_sort_by_average(Student students[], int left, int right);
 
@@ -54,12 +62,17 @@ void findStudentByName(Student students[], int count);
 void sort_by_average_threaded_msort(Student students[], int count);
 void sort_by_average_threaded_qsort(Student students[], int count);
 void sort_by_average_qsort(Student students[], int count);
-
+void sort_by_name_mt(Student students[], int count);
+float class_average(Student students[], int count);
+void top_n_students(Student students[], int count,int n);
+void bottom_n_students(Student students[], int count, int n);
+void grade_distribution(Student students[], int count);
 // Thread function declaration
 void calculate_averages_pthread(Student students[], int count);
-void merge_sort_pthread(Student students[], int count);
 void random_name(char *name, int min_len, int max_len);
 void merge_sort_by_average_mt(Student students[], int left, int right);
 void quick_sort_by_average_mt(Student students[], int left, int right);
+void quick_sort_by_name_mt(Student students[], int left, int right);
+void findStudentByName_mt(Student students[], int count);
 
 #endif

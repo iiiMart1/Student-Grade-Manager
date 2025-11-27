@@ -4,21 +4,35 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
-
+#define MAX_THREADS 8
 #define MAX_STUDENTS 10000
 sem_t s;
-int active_threads = 0;
 pthread_mutex_t qs_mutex = PTHREAD_MUTEX_INITIALIZER;
-int qs_active_threads = 0;
+pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t qs_name_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t find_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int qs_name_active_threads = 0, qs_active_threads = 0, active_threads = 0;
 // Helper function to calculate student average
 float calculate_student_average(Student student)
 {
     return (student.opsys.TD + student.opsys.TP) * 0.2 + student.opsys.EXAM * 0.6;
 }
+// Display the main menu options
+void display_menu()
+{
+    printf("\n========= Menu =========\n");
+    printf("1) Add Student\n");
+    printf("2) Display Students\n");
+    printf("3) Calculate Averages\n");
+    printf("4) Sort Students\n");
+    printf("5) Find Student By Name\n");
+    printf("6) Find Student By Name MT\n");
+    printf("7) Create Test Data\n");
+    printf("8) Statistics\n");
+    printf("9) Exit\n");
+}
 
-pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
-#define MAX_THREADS 4
 void merge_by_average(Student students[], int left, int mid, int right)
 {
     int i, j, k;
@@ -153,7 +167,6 @@ void quick_sort_by_average(Student students[], int left, int right)
     }
 }
 
-
 void *quick_sort_worker(void *arg);
 
 void quick_sort_by_average_mt(Student students[], int left, int right)
@@ -213,25 +226,81 @@ int compare_students_by_name(const void *a, const void *b)
     return strcmp(s1->name, s2->name);
 }
 
-/* Convenience wrapper */
-void sort_students_by_name(Student students[], int count)
+// Partition function by name (ascending)
+int partition_by_name(Student students[], int left, int right)
 {
-    qsort(students, count, sizeof(Student), compare_students_by_name);
-    display_students(students, count);
+    char *pivot = students[right].name;
+    int i = left - 1;
+
+    for (int j = left; j < right; j++)
+    {
+        if (strcmp(students[j].name, pivot) <= 0)
+        {
+            i++;
+            Student tmp = students[i];
+            students[i] = students[j];
+            students[j] = tmp;
+        }
+    }
+
+    Student tmp = students[i + 1];
+    students[i + 1] = students[right];
+    students[right] = tmp;
+
+    return i + 1;
+}
+void *quick_sort_name_worker(void *arg);
+// Multithreaded quicksort by name
+void quick_sort_by_name_mt(Student students[], int left, int right)
+{
+    if (left >= right)
+        return;
+
+    int pi = partition_by_name(students, left, right);
+    int spawn_thread = 0;
+    pthread_t thread;
+
+    pthread_mutex_lock(&qs_name_mutex);
+    if (qs_name_active_threads < MAX_THREADS)
+    {
+        qs_name_active_threads++;
+        spawn_thread = 1;
+    }
+    pthread_mutex_unlock(&qs_name_mutex);
+
+    if (spawn_thread)
+    {
+        QuickSortData *data = malloc(sizeof(QuickSortData));
+        data->students = students;
+        data->left = left;
+        data->right = pi - 1;
+        pthread_create(&thread, NULL, quick_sort_name_worker, data);
+
+        // Sort right side in current thread
+        quick_sort_by_name_mt(students, pi + 1, right);
+
+        pthread_join(thread, NULL);
+    }
+    else
+    {
+        // Both sides in current thread if thread limit reached
+        quick_sort_by_name_mt(students, left, pi - 1);
+        quick_sort_by_name_mt(students, pi + 1, right);
+    }
 }
 
-// Display the main menu options
-void display_menu()
+// Worker function for threads
+void *quick_sort_name_worker(void *arg)
 {
-    printf("\n=== Student Management Menu ===\n");
-    printf("1) Add Student\n");
-    printf("2) Display Students\n");
-    printf("3) Calculate Averages\n");
-    printf("4) Sort Students\n");
-    printf("5) Test Sorting Functions\n");
-    printf("6) Create Test Data\n");
-    printf("7) Find Student by Name\n");
-    printf("8) Exit\n");
+    QuickSortData *data = (QuickSortData *)arg;
+    quick_sort_by_name_mt(data->students, data->left, data->right);
+    free(data);
+
+    pthread_mutex_lock(&qs_name_mutex);
+    qs_name_active_threads--;
+    pthread_mutex_unlock(&qs_name_mutex);
+
+    return NULL;
 }
 
 // Add a new student to the system
@@ -466,13 +535,29 @@ void sort_by_name(Student students[], int count)
     printf("\n=== After Sorting by Name (Ascending) ===\n");
     display_students(students, count);
 }
+void sort_by_name_mt(Student students[], int count)
+{
+    if (count == 0)
+    {
+        printf("No students to sort.\n");
+        return;
+    }
+    if (count > 0)
+    {
 
+        quick_sort_by_name_mt(students, 0, count - 1); // 1 for ascending order
+    }
+
+    printf("\n=== After Sorting by Name (Ascending) ===\n");
+    display_students(students, count);
+}
 void findStudentByName(Student students[], int count)
 {
     char name[50];
 
     printf("Enter student name: ");
-    scanf("%49s", name);
+    fgets(name, sizeof(name), stdin);
+    name[strcspn(name, "\n")] = 0;
     int index = -1;
 
     for (int i = 0; i < count; i++)
@@ -495,6 +580,74 @@ void findStudentByName(Student students[], int count)
                calculate_student_average(students[index]));
     }
 }
+void *search_worker(void *arg)
+{
+    SearchThreadData *data = (SearchThreadData *)arg;
+
+    for (int i = data->start; i < data->end; i++)
+    {
+        if (*data->found_flag) // Already found by another thread
+            return NULL;
+
+        if (strcmp(data->students[i].name, data->target_name) == 0)
+        {
+            pthread_mutex_lock(&find_mutex);
+            if (!(*data->found_flag)) // Double-check
+            {
+                data->found_index = i;
+                *data->found_flag = 1;
+            }
+            pthread_mutex_unlock(&find_mutex);
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
+void findStudentByName_mt(Student students[], int count)
+{
+    char name[50];
+    printf("Enter student name: ");
+    fgets(name, sizeof(name), stdin);
+    name[strcspn(name, "\n")] = 0;
+
+    pthread_t threads[NUM_THREADS];
+    SearchThreadData thread_data[NUM_THREADS];
+    int found_flag = 0;
+
+    int chunk = count / NUM_THREADS;
+    int extra = count % NUM_THREADS;
+    int start = 0;
+
+    for (int t = 0; t < NUM_THREADS; t++)
+    {
+        thread_data[t].students = students;
+        thread_data[t].start = start;
+        thread_data[t].end = start + chunk + (t < extra ? 1 : 0);
+        thread_data[t].target_name = name;
+        thread_data[t].found_index = -1;
+        thread_data[t].found_flag = &found_flag;
+
+        pthread_create(&threads[t], NULL, search_worker, &thread_data[t]);
+        start = thread_data[t].end;
+    }
+
+    int final_index = -1;
+    for (int t = 0; t < NUM_THREADS; t++)
+    {
+        pthread_join(threads[t], NULL);
+        if (thread_data[t].found_index != -1)
+            final_index = thread_data[t].found_index;
+    }
+
+    if (final_index == -1)
+        printf("Student not found.\n");
+    else
+        printf("%s's average = %.2f\n",
+               students[final_index].name,
+               calculate_student_average(students[final_index]));
+}
 void create_test_data(Student students[], int *count, int num_students)
 {
     *count = 0; // Reset the current count
@@ -508,9 +661,9 @@ void create_test_data(Student students[], int *count, int num_students)
         random_name(students[*count].name, 6, 7);
 
         // Generate random grades between 7 and 20
-        students[*count].opsys.TD = 3 + rand() % 14;
-        students[*count].opsys.TP = 4 + rand() % 14;
-        students[*count].opsys.EXAM = 3 + rand() % 14;
+        students[*count].opsys.TD = rand() % 14 + 6;
+        students[*count].opsys.TP = rand() % 14 + 6;
+        students[*count].opsys.EXAM = rand() % 14 + 4;
 
         (*count)++; // Increment total students
     }
@@ -537,6 +690,71 @@ void random_name(char *name, int min_len, int max_len)
         name[0] = name[0] - 'a' + 'A';
 
     name[len] = '\0';
+}
+float class_average(Student students[], int count)
+{
+    if (count == 0)
+        return 0.0;
+
+    float sum = 0;
+    for (int i = 0; i < count; i++)
+        sum += calculate_student_average(students[i]);
+
+    printf("Class Average : %.2f", sum / count);
+    return 0;
+}
+void top_n_students(Student students[], int count, int n)
+{
+    if (n > count)
+        n = count;
+
+    printf("\n--- Top %d Students ---\n", n);
+
+    for (int i = 0; i < n; i++)
+    {
+        float avg = calculate_student_average(students[i]);
+        printf("%d) %s  Average: %.2f\n", i + 1, students[i].name, avg);
+    }
+}
+void bottom_n_students(Student students[], int count, int n)
+{
+    if (n > count)
+        n = count;
+
+    printf("\n--- Bottom %d Students ---\n", n);
+    int start = count - n;
+    for (int i = count - 1; i >= start; i--)
+    {
+        float avg = calculate_student_average(students[i]);
+        printf("%d) %s  Average: %.2f\n", i + 1, students[i].name, avg);
+    }
+}
+void grade_distribution(Student students[], int count)
+{
+    int A = 0, B = 0, C = 0, D = 0, F = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        float avg = calculate_student_average(students[i]);
+
+        if (avg >= 16)
+            A++;
+        else if (avg >= 14)
+            B++;
+        else if (avg >= 12)
+            C++;
+        else if (avg >= 10)
+            D++;
+        else
+            F++;
+    }
+
+    printf("\n--- Grade Distribution ---\n");
+    printf("Exellent : %d (%.2f%%)\n", A, 100.0 * A / count);
+    printf("Very Good : %d (%.2f%%)\n", B, 100.0 * B / count);
+    printf("Good : %d (%.2f%%)\n", C, 100.0 * C / count);
+    printf("Average : %d (%.2f%%)\n", D, 100.0 * D / count);
+    printf("Weak : %d (%.2f%%)\n", F, 100.0 * F / count);
 }
 #ifdef _WIN32
 #include <windows.h>
